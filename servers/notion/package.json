@@ -1,0 +1,36 @@
+{
+  "name": "notion-mcp-server",
+  "version": "1.0.0",
+  "description": "Notion MCP Server for STAR-MCP Ecosystem",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "ts-node-esm --experimental-specifier-resolution=node src/index.ts"
+  },
+  "keywords": [
+    "notion",
+    "mcp",
+    "star-mcp",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.2.0",
+    "@notionhq/client": "^2.2.14",
+    "@supabase/supabase-js": "^2.39.3",
+    "dotenv": "^16.4.1",
+    "jsdom": "^23.2.0",
+    "pgvector": "^0.1.7",
+    "openai": "^4.26.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^21.1.6",
+    "@types/node": "^20.11.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

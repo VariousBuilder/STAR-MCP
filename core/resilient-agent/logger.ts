@@ -1,153 +1,196 @@
 /**
- * ロギングモジュール
+ * レジリエントエージェントフレームワークのロギングモジュール
  */
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+import fs from 'fs';
+import path from 'path';
+import { LogLevel } from './types';
 
-export class Logger {
-  private name: string;
-  private level: LogLevel;
-  private logs: Array<{
-    timestamp: string;
-    level: LogLevel;
-    message: string;
-    data?: any;
-  }> = [];
-  
-  constructor(name: string, level: LogLevel = 'info') {
-    this.name = name;
-    this.level = level;
+class Logger {
+  private logFilePath: string;
+  private logLevel: LogLevel;
+  private logToConsole: boolean;
+  private maxLogSize: number;
+  private maxLogFiles: number;
+
+  constructor(options: {
+    logDir?: string;
+    logLevel?: LogLevel;
+    logToConsole?: boolean;
+    maxLogSize?: number;
+    maxLogFiles?: number;
+  } = {}) {
+    const logDir = options.logDir || path.join(process.cwd(), 'shared', 'logs');
+    this.logLevel = options.logLevel || LogLevel.INFO;
+    this.logToConsole = options.logToConsole !== undefined ? options.logToConsole : true;
+    this.maxLogSize = options.maxLogSize || 10 * 1024 * 1024; // 10MB
+    this.maxLogFiles = options.maxLogFiles || 5;
+
+    // ログディレクトリが存在しない場合は作成
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+
+    this.logFilePath = path.join(logDir, `app_${this.getFormattedDate()}.log`);
   }
-  
+
   /**
-   * デバッグレベルのログを出力
-   * @param message ログメッセージ
-   * @param data 追加データ（オプション）
+   * ログを記録する
    */
-  debug(message: string, data?: any): void {
-    this.log('debug', message, data);
-  }
-  
-  /**
-   * 情報レベルのログを出力
-   * @param message ログメッセージ
-   * @param data 追加データ（オプション）
-   */
-  info(message: string, data?: any): void {
-    this.log('info', message, data);
-  }
-  
-  /**
-   * 警告レベルのログを出力
-   * @param message ログメッセージ
-   * @param data 追加データ（オプション）
-   */
-  warn(message: string, data?: any): void {
-    this.log('warn', message, data);
-  }
-  
-  /**
-   * エラーレベルのログを出力
-   * @param message ログメッセージ
-   * @param data 追加データ（オプション）
-   */
-  error(message: string, data?: any): void {
-    this.log('error', message, data);
-  }
-  
-  /**
-   * ログレベルを設定
-   * @param level 新しいログレベル
-   */
-  setLevel(level: LogLevel): void {
-    this.level = level;
-  }
-  
-  /**
-   * ログ履歴を取得
-   * @returns ログ履歴の配列
-   */
-  getLogs(): Array<{
-    timestamp: string;
-    level: LogLevel;
-    message: string;
-    data?: any;
-  }> {
-    return [...this.logs];
-  }
-  
-  /**
-   * 指定されたレベルのログを出力
-   * @param level ログレベル
-   * @param message ログメッセージ
-   * @param data 追加データ（オプション）
-   */
-  private log(level: LogLevel, message: string, data?: any): void {
-    // レベルチェック
+  log(level: LogLevel, message: string, metadata: object = {}): void {
+    // ログレベルチェック
     if (!this.shouldLog(level)) {
       return;
     }
-    
+
     const timestamp = new Date().toISOString();
     const logEntry = {
       timestamp,
       level,
       message,
-      data
+      ...metadata
     };
-    
-    // ログをメモリに保存
-    this.logs.push(logEntry);
-    
-    // コンソールに出力
-    const formattedMessage = this.formatLogMessage(timestamp, level, message);
-    
-    switch (level) {
-      case 'debug':
-        console.debug(formattedMessage);
-        break;
-      case 'info':
-        console.info(formattedMessage);
-        break;
-      case 'warn':
-        console.warn(formattedMessage);
-        break;
-      case 'error':
-        console.error(formattedMessage);
-        break;
+
+    const logString = `[${timestamp}] [${level.toUpperCase()}] ${message} ${
+      Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : ''
+    }`;
+
+    // コンソールにログ出力
+    if (this.logToConsole) {
+      this.logToConsoleOutput(level, logString);
     }
-    
-    // データが存在する場合は出力
-    if (data) {
-      if (level === 'error' || level === 'warn') {
-        console.error(data);
-      } else {
-        console.log(data);
+
+    // ファイルにログ出力
+    this.appendToLogFile(logString);
+  }
+
+  /**
+   * デバッグログ
+   */
+  debug(message: string, metadata: object = {}): void {
+    this.log(LogLevel.DEBUG, message, metadata);
+  }
+
+  /**
+   * 情報ログ
+   */
+  info(message: string, metadata: object = {}): void {
+    this.log(LogLevel.INFO, message, metadata);
+  }
+
+  /**
+   * 警告ログ
+   */
+  warn(message: string, metadata: object = {}): void {
+    this.log(LogLevel.WARN, message, metadata);
+  }
+
+  /**
+   * エラーログ
+   */
+  error(message: string, metadata: object = {}): void {
+    this.log(LogLevel.ERROR, message, metadata);
+  }
+
+  /**
+   * ログレベルを設定する
+   */
+  setLogLevel(level: LogLevel): void {
+    this.logLevel = level;
+  }
+
+  /**
+   * ログファイルをローテーションする
+   */
+  private rotateLogFileIfNeeded(): void {
+    try {
+      if (!fs.existsSync(this.logFilePath)) {
+        return;
       }
+
+      const stats = fs.statSync(this.logFilePath);
+      if (stats.size < this.maxLogSize) {
+        return;
+      }
+
+      // 古いログファイルをローテーション
+      const dirName = path.dirname(this.logFilePath);
+      const baseName = path.basename(this.logFilePath);
+      const ext = path.extname(baseName);
+      const nameWithoutExt = baseName.substring(0, baseName.length - ext.length);
+
+      // 既存のログファイルをリネーム
+      for (let i = this.maxLogFiles - 1; i > 0; i--) {
+        const oldFile = path.join(dirName, `${nameWithoutExt}.${i}${ext}`);
+        const newFile = path.join(dirName, `${nameWithoutExt}.${i + 1}${ext}`);
+        
+        if (fs.existsSync(oldFile)) {
+          if (i === this.maxLogFiles - 1) {
+            fs.unlinkSync(oldFile); // 最大数に達したら古いファイルを削除
+          } else {
+            fs.renameSync(oldFile, newFile);
+          }
+        }
+      }
+
+      // 現在のログファイルをリネーム
+      const newFile = path.join(dirName, `${nameWithoutExt}.1${ext}`);
+      fs.renameSync(this.logFilePath, newFile);
+
+    } catch (error) {
+      console.error('Error rotating log files:', error);
     }
   }
-  
+
   /**
-   * 指定されたレベルがログ出力対象かチェック
-   * @param level チェックするログレベル
-   * @returns ログ出力対象かどうか
+   * ログをファイルに追加する
+   */
+  private appendToLogFile(logString: string): void {
+    try {
+      this.rotateLogFileIfNeeded();
+      fs.appendFileSync(this.logFilePath, logString + '\n', 'utf8');
+    } catch (error) {
+      console.error('Failed to write to log file:', error);
+    }
+  }
+
+  /**
+   * コンソールにログを出力する
+   */
+  private logToConsoleOutput(level: LogLevel, logString: string): void {
+    switch (level) {
+      case LogLevel.DEBUG:
+        console.debug(logString);
+        break;
+      case LogLevel.INFO:
+        console.info(logString);
+        break;
+      case LogLevel.WARN:
+        console.warn(logString);
+        break;
+      case LogLevel.ERROR:
+        console.error(logString);
+        break;
+    }
+  }
+
+  /**
+   * 現在のログレベルでログを記録するべきかどうか
    */
   private shouldLog(level: LogLevel): boolean {
-    const levels: LogLevel[] = ['debug', 'info', 'warn', 'error'];
-    const configLevelIndex = levels.indexOf(this.level);
+    const levels = [LogLevel.DEBUG, LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR];
+    const currentLevelIndex = levels.indexOf(this.logLevel);
     const targetLevelIndex = levels.indexOf(level);
-    
-    return targetLevelIndex >= configLevelIndex;
+    return targetLevelIndex >= currentLevelIndex;
   }
-  
+
   /**
-   * ログメッセージをフォーマット
-   * @param timestamp タイムスタンプ
-   * @param level ログレベル
-   * @param message ログメッセージ
-   * @returns フォーマットされたログメッセージ
+   * 現在の日付を取得 (YYYY-MM-DD形式)
    */
-  private formatLogMessage(timestamp: string, level: LogLevel, message: string): string {
-    return `[${timestamp}] [${level.toUpperCase()}] [${this.name}] ${message}`;
+  private getFormattedDate(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   }
 }
+
+export default Logger;

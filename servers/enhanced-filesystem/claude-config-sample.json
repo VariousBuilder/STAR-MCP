@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "enhanced-filesystem": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\tomoy\\Dropbox\\01_Dev\\STAR-MCP\\servers\\enhanced-filesystem\\build\\index.js",
+        "C:\\Users\\tomoy"
+      ]
+    }
+  }
+}

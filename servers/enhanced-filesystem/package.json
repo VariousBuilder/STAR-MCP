@@ -1,0 +1,35 @@
+{
+  "name": "enhanced-filesystem-server",
+  "version": "1.0.0",
+  "description": "Enhanced filesystem server for STAR-MCP ecosystem",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc-watch --onSuccess \"node build/index.js\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mcp",
+    "filesystem",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.2.2",
+    "chokidar": "^3.5.3",
+    "glob": "^10.3.10",
+    "ignore": "^5.3.1",
+    "mime-types": "^2.1.35",
+    "node-fetch": "^3.3.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^20.11.19",
+    "typescript": "^5.3.3",
+    "tsc-watch": "^6.0.4"
+  }
+}
