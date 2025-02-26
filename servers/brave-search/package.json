@@ -1,0 +1,23 @@
+{
+  "name": "@star-mcp/brave-search",
+  "version": "1.0.0",
+  "description": "Brave Search MCP Server for STAR-MCP ecosystem",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.2.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

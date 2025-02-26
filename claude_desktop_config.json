@@ -1,0 +1,46 @@
+{
+  "mcpServers": {
+    "star-mcp": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\tomoy\\Dropbox\\01_Dev\\STAR-MCP\\core\\index.js"
+      ],
+      "env": {
+        "SHARED_MCP_DATA": "C:\\Users\\tomoy\\Dropbox\\01_Dev\\STAR-MCP\\shared",
+        "OBSIDIAN_VAULT_PATH": "C:\\Users\\tomoy\\Google_OddAI\\マイドライブ\\02_生活\\Obsidian_Vault\\Dev_docs"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\Users\\tomoy"
+      ]
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--no-cache", 
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env": {
+        "APPDATA": "C:\\Users\\tomoy\\AppData\\Roaming\\",
+        "BRAVE_API_KEY": "BSAtYvJwjVTsFbAdTw_g_ZRGykW_71J",
+        "SHARED_MCP_DATA": "C:\\Users\\tomoy\\Dropbox\\01_Dev\\STAR-MCP\\shared"
+      }
+    },
+    "obsidian": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "mcp-obsidian",
+        "--config",
+        "{\"vaultPath\":\"C:\\\\Users\\\\tomoy\\\\Google_OddAI\\\\マイドライブ\\\\02_生活\\\\Obsidian_Vault\"}"
+      ]
+    }
+  }
+}

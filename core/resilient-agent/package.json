@@ -1,0 +1,21 @@
+{
+  "name": "@star-mcp/resilient-agent",
+  "version": "1.0.0",
+  "description": "エラーで停止しない回復力のあるAIエージェントフレームワーク",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

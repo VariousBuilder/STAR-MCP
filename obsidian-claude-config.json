@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "obsidian": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "mcp-obsidian",
+        "--config",
+        "{\"vaultPath\":\"C:\\\\Users\\\\tomoy\\\\Google_OddAI\\\\マイドライブ\\\\02_生活\\\\Obsidian_Vault\"}"
+      ]
+    }
+  }
+}

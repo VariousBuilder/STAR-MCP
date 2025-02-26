@@ -1,0 +1,11 @@
+{
+  "name": "star-mcp-core",
+  "version": "1.0.0",
+  "description": "STAR-MCP Core Server",
+  "type": "module",
+  "main": "index.js",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.2.0",
+    "zod": "^3.22.4"
+  }
+}

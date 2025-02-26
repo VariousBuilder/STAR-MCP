@@ -1,0 +1,12 @@
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = false
+	logallrefupdates = true
+	ignorecase = true
+[remote "origin"]
+	url = C:\\Users\\tomoy\\Gits\\STAR-MCP.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[remote "github"]
+	url = https://github.com/VariousBuilder/STAR-MCP
+	fetch = +refs/heads/*:refs/remotes/github/*

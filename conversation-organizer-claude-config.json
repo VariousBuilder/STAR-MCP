@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "conversation-organizer": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\tomoy\\Dropbox\\01_Dev\\STAR-MCP\\agents\\conversation-organizer\\build\\index.js"
+      ],
+      "env": {
+        "CLAUDE_LOGS_DIR": "%APPDATA%\\Claude\\logs",
+        "SESSION_DATA_DIR": "C:\\Users\\tomoy\\Dropbox\\01_Dev\\STAR-MCP\\agents\\conversation-organizer\\.sessions"
+      }
+    }
+  }
+}

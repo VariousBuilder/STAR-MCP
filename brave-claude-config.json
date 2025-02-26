@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "brave-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--no-cache", 
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env": {
+        "APPDATA": "C:\\Users\\tomoy\\AppData\\Roaming\\",
+        "BRAVE_API_KEY": "BSAtYvJwjVTsFbAdTw_g_ZRGykW_71J",
+        "SHARED_MCP_DATA": "C:\\Users\\tomoy\\Dropbox\\01_Dev\\STAR-MCP\\shared"
+      }
+    }
+  }
+}

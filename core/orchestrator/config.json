@@ -1,0 +1,48 @@
+{
+  "version": "1.0.0",
+  "servers": {
+    "gdrive": {
+      "path": "../../servers/gdrive",
+      "type": "node",
+      "healthCheck": true,
+      "autoRestart": true
+    },
+    "dropbox": {
+      "path": "../../servers/dropbox",
+      "type": "node",
+      "healthCheck": true,
+      "autoRestart": true
+    },
+    "notion": {
+      "path": "../../servers/notion",
+      "type": "node",
+      "healthCheck": true,
+      "autoRestart": true
+    },
+    "supabase": {
+      "path": "../../servers/supabase",
+      "type": "python",
+      "healthCheck": true,
+      "autoRestart": true
+    }
+  },
+  "agents": {
+    "task-optimizer": {
+      "enabled": true,
+      "tytanIntegration": true,
+      "updateInterval": 300
+    },
+    "tech-scout": {
+      "enabled": true,
+      "sources": ["github", "arxiv", "tech-blogs"],
+      "pocAutomation": true
+    }
+  },
+  "interface": {
+    "3dVisualization": {
+      "enabled": true,
+      "engine": "neo4j-3d-force-graph",
+      "updateInterval": 5
+    }
+  }
+}

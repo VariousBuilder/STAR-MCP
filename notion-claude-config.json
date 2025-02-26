@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "notion": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\tomoy\\Dropbox\\01_Dev\\STAR-MCP\\servers\\notion\\mcp-notion-server_plus\\build\\index.js"
+      ],
+      "env": {
+        "NOTION_API_TOKEN": "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",
+        "OBSIDIAN_VAULT_PATH": "C:\\Users\\tomoy\\Google_OddAI\\マイドライブ\\02_生活\\Obsidian_Vault\\Dev_docs",
+        "SHARED_MCP_DATA": "C:\\Users\\tomoy\\Google_OddAI\\マイドライブ\\star-mcp"
+      }
+    }
+  }
+}
