@@ -6,7 +6,7 @@
   "main": "build/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node build/index.js",
+    "start": "node dist/index.js",
     "dev": "tsc-watch --onSuccess \"node build/index.js\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -18,18 +18,20 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.2.2",
-    "chokidar": "^3.5.3",
-    "glob": "^10.3.10",
-    "ignore": "^5.3.1",
-    "mime-types": "^2.1.35",
-    "node-fetch": "^3.3.2",
-    "zod": "^3.22.4"
+    "@modelcontextprotocol/sdk": "1.2.0",
+    "chokidar": "3.5.3",
+    "glob": "10.4.5",
+    "ignore": "5.3.1",
+    "mime-types": "2.1.35",
+    "node-fetch": "3.3.2",
+    "zod": "3.22.4"
   },
   "devDependencies": {
-    "@types/mime-types": "^2.1.4",
-    "@types/node": "^20.11.19",
-    "typescript": "^5.3.3",
-    "tsc-watch": "^6.0.4"
+    "@types/glob": "8.1.0",
+    "@types/mime-types": "2.1.4",
+    "@types/node": "20.17.19",
+    "ts-node": "10.9.2",
+    "tsc-watch": "6.0.4",
+    "typescript": "5.7.3"
   }
 }

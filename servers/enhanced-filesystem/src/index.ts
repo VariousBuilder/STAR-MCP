@@ -16,6 +16,17 @@ const VERSION = "1.0.0";
 // コマンドライン引数を取得
 const allowedPaths = process.argv.slice(2);
 
+const requestSchema = z.object({
+  method: z.literal("tools/call"),
+  params: z.object({
+    name: z.string(),
+    arguments: z.any().optional(),
+  }).optional(),
+});
+
+
+
+
 // 許可されたパスが指定されていない場合はエラー
 if (allowedPaths.length === 0) {
   console.error("Error: No allowed paths specified");
@@ -57,697 +68,622 @@ function isPathAllowed(filePath: string): boolean {
 }
 
 // ======== ツール実装 ========
+// ツールのメソッドを登録
 
 // ディレクトリ内容のリスト表示ツール
-server.tool(
-  "list_directory",
-  "List contents of a directory",
-  {
-    directory_path: z.string().describe("Path to the directory to list"),
-  },
-  async ({ directory_path }) => {
-    try {
-      // パス検証
-      if (!isPathAllowed(directory_path)) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: Access to path "${directory_path}" is not allowed`,
-            },
-          ],
-        };
-      }
+server.setRequestHandler(requestSchema, async (request) => {
+  const toolName = request.params?.name;
+  const args = request.params?.arguments || {};
 
-      // ディレクトリ存在確認
-      const stats = await fs.stat(directory_path);
-      if (!stats.isDirectory()) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: "${directory_path}" is not a directory`,
-            },
-          ],
-        };
-      }
-
-      // ディレクトリ内容の取得
-      const files = await fs.readdir(directory_path);
-      
-      // ファイル情報取得
-      const fileInfoPromises = files.map(async (file) => {
-        const filePath = path.join(directory_path, file);
-        try {
-          const stats = await fs.stat(filePath);
-          return {
-            name: file,
-            path: filePath,
-            isDirectory: stats.isDirectory(),
-            size: stats.size,
-            modified: stats.mtime.toISOString(),
-            created: stats.birthtime.toISOString(),
-          };
-        } catch (error) {
-          return {
-            name: file,
-            path: filePath,
-            error: "Cannot access file information",
-          };
-        }
-      });
-
-      const fileInfoList = await Promise.all(fileInfoPromises);
-      
-      // ディレクトリと通常ファイルで分けてソート
-      const directories = fileInfoList
-        .filter((item) => item.isDirectory)
-        .sort((a, b) => a.name.localeCompare(b.name));
-      
-      const files2 = fileInfoList
-        .filter((item) => !item.isDirectory && !("error" in item))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      
-      const errorFiles = fileInfoList
-        .filter((item) => "error" in item)
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      // レスポンス形成
-      let result = `Directory: ${directory_path}\n\n`;
-      
-      result += "📁 Directories:\n";
-      if (directories.length > 0) {
-        directories.forEach((dir) => {
-          result += `  📁 ${dir.name}/\n`;
-        });
-      } else {
-        result += "  (None)\n";
-      }
-      
-      result += "\n📄 Files:\n";
-      if (files2.length > 0) {
-        files2.forEach((file) => {
-          const sizeStr = formatFileSize(file.size);
-          result += `  📄 ${file.name} (${sizeStr}, Modified: ${formatDate(file.modified)})\n`;
-        });
-      } else {
-        result += "  (None)\n";
-      }
-      
-      if (errorFiles.length > 0) {
-        result += "\n⚠️ Files with errors:\n";
-        errorFiles.forEach((file) => {
-          result += `  ⚠️ ${file.name} (${file.error})\n`;
-        });
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: result,
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: `Error listing directory: ${error.message}`,
-          },
-        ],
-      };
-    }
-  }
-);
-
-// ファイル読み取りツール
-server.tool(
-  "read_file",
-  "Read contents of a file",
-  {
-    file_path: z.string().describe("Path to the file to read"),
-  },
-  async ({ file_path }) => {
-    try {
-      // パス検証
-      if (!isPathAllowed(file_path)) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: Access to path "${file_path}" is not allowed`,
-            },
-          ],
-        };
-      }
-
-      // ファイル存在確認
-      const stats = await fs.stat(file_path);
-      if (!stats.isFile()) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: "${file_path}" is not a file`,
-            },
-          ],
-        };
-      }
-
-      // ファイルサイズ確認 (安全のため)
-      const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-      if (stats.size > MAX_SIZE) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: File "${file_path}" is too large (${formatFileSize(stats.size)}). Maximum size is ${formatFileSize(MAX_SIZE)}.`,
-            },
-          ],
-        };
-      }
-
-      // MIMEタイプを取得
-      const mimeType = mime.lookup(file_path) || "application/octet-stream";
-      
-      // テキストファイルのみ対応
-      if (!mimeType.startsWith("text/") && 
-          mimeType !== "application/json" && 
-          mimeType !== "application/javascript" && 
-          mimeType !== "application/xml") {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: File "${file_path}" is not a text file. MIME type: ${mimeType}`,
-            },
-          ],
-        };
-      }
-
-      // ファイル読み取り
-      const content = await fs.readFile(file_path, "utf-8");
-      
-      // ファイル情報を含めて返す
-      const result = `File: ${file_path}\nSize: ${formatFileSize(stats.size)}\nModified: ${stats.mtime.toISOString()}\nType: ${mimeType}\n\n${content}`;
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: result,
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: `Error reading file: ${error.message}`,
-          },
-        ],
-      };
-    }
-  }
-);
-
-// ファイル書き込みツール
-server.tool(
-  "write_file",
-  "Write content to a file",
-  {
-    file_path: z.string().describe("Path to the file to write"),
-    content: z.string().describe("Content to write to the file"),
-    append: z.boolean().optional().describe("Append to the file instead of overwriting"),
-  },
-  async ({ file_path, content, append = false }) => {
-    try {
-      // パス検証
-      if (!isPathAllowed(file_path)) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: Access to path "${file_path}" is not allowed`,
-            },
-          ],
-        };
-      }
-
-      // 書き込みモード
-      const writeMode = append ? fs.appendFile : fs.writeFile;
-
-      // ディレクトリ存在確認
-      const dirPath = path.dirname(file_path);
+  // ツール名に基づいて処理を分岐
+  switch (toolName) {
+    case "list_directory": {
+      const directory_path = args.directory_path as string;
       try {
-        await fs.access(dirPath);
-      } catch (error) {
-        // ディレクトリが存在しない場合は作成
-        await fs.mkdir(dirPath, { recursive: true });
-      }
-
-      // ファイル書き込み
-      await writeMode(file_path, content, "utf-8");
-
-      // ファイル情報を取得
-      const stats = await fs.stat(file_path);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Successfully ${append ? "appended to" : "wrote"} file: ${file_path}\nSize: ${formatFileSize(stats.size)}\nModified: ${stats.mtime.toISOString()}`,
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: `Error writing to file: ${error.message}`,
-          },
-        ],
-      };
-    }
-  }
-);
-
-// ファイル削除ツール
-server.tool(
-  "delete_file",
-  "Delete a file or directory",
-  {
-    path: z.string().describe("Path to the file or directory to delete"),
-    recursive: z.boolean().optional().describe("Delete directories recursively"),
-  },
-  async ({ path: filePath, recursive = false }) => {
-    try {
-      // パス検証
-      if (!isPathAllowed(filePath)) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: Access to path "${filePath}" is not allowed`,
-            },
-          ],
-        };
-      }
-
-      // ファイル存在確認
-      const stats = await fs.stat(filePath);
-      
-      if (stats.isDirectory()) {
-        if (!recursive) {
+        // パス検証
+        if (!isPathAllowed(directory_path)) {
           return {
             isError: true,
             content: [
               {
                 type: "text",
-                text: `Error: "${filePath}" is a directory. Set recursive=true to delete directories.`,
+                text: `Error: Access to path "${directory_path}" is not allowed`,
+              },
+            ],
+          };
+        }
+
+        // ディレクトリ存在確認
+        const stats = await fs.stat(directory_path);
+        if (!stats.isDirectory()) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: "${directory_path}" is not a directory`,
+              },
+            ],
+          };
+        }
+
+        // ディレクトリ内容の取得
+        const entries = await fs.readdir(directory_path, { withFileTypes: true });
+        const contents = await Promise.all(
+          entries.map(async (entry) => {
+            const fullPath = path.join(directory_path, entry.name);
+            const stats = await fs.stat(fullPath);
+            const isDir = stats.isDirectory();
+            const size = !isDir ? formatFileSize(stats.size) : "";
+            const modifiedAt = formatDate(stats.mtime.toISOString());
+
+            return {
+              name: entry.name,
+              path: fullPath,
+              isDirectory: isDir,
+              size,
+              modifiedAt,
+            };
+          })
+        );
+
+        // 結果の整形とソート（ディレクトリ優先）
+        contents.sort((a, b) => {
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+        // 結果を返す
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(contents, null, 2),
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Error listing directory: ${error.message}`,
+            },
+          ],
+        };
+      }
+    }
+    
+    case "read_file": {
+      const file_path = args.file_path as string;
+      try {
+        // パス検証
+        if (!isPathAllowed(file_path)) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: Access to path "${file_path}" is not allowed`,
+              },
+            ],
+          };
+        }
+
+        // ファイル存在確認
+        const stats = await fs.stat(file_path);
+        if (!stats.isFile()) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: "${file_path}" is not a file`,
+              },
+            ],
+          };
+        }
+
+        // ファイルサイズ確認 (安全のため)
+        const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+        if (stats.size > MAX_SIZE) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: File "${file_path}" is too large (${formatFileSize(stats.size)}). Maximum size is ${formatFileSize(MAX_SIZE)}.`,
+              },
+            ],
+          };
+        }
+
+        // MIMEタイプを取得
+        const mimeType = mime.lookup(file_path) || "application/octet-stream";
+        
+        // テキストファイルのみ対応
+        if (!mimeType.startsWith("text/") && 
+            mimeType !== "application/json" && 
+            mimeType !== "application/javascript" && 
+            mimeType !== "application/xml") {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: File "${file_path}" is not a text file. MIME type: ${mimeType}`,
+              },
+            ],
+          };
+        }
+
+        // ファイル読み取り
+        const content = await fs.readFile(file_path, "utf-8");
+        
+        // ファイル情報を含めて返す
+        const result = `File: ${file_path}\nSize: ${formatFileSize(stats.size)}\nModified: ${stats.mtime.toISOString()}\nType: ${mimeType}\n\n${content}`;
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: result,
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Error reading file: ${error.message}`,
+            },
+          ],
+        };
+      }
+    }
+
+    case "write_file": {
+      const file_path = args.file_path as string;
+      const content = args.content as string;
+      const append = args.append as boolean || false;
+      
+      try {
+        // パス検証
+        if (!isPathAllowed(file_path)) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: Access to path "${file_path}" is not allowed`,
+              },
+            ],
+          };
+        }
+
+        // ディレクトリが存在するか確認
+        const dir = path.dirname(file_path);
+        try {
+          await fs.access(dir);
+        } catch (error) {
+          // ディレクトリが存在しない場合は作成
+          await fs.mkdir(dir, { recursive: true });
+        }
+
+        // ファイル書き込み（追記または上書き）
+        if (append) {
+          await fs.appendFile(file_path, content, "utf-8");
+        } else {
+          await fs.writeFile(file_path, content, "utf-8");
+        }
+
+        // 更新されたファイル情報を取得
+        const stats = await fs.stat(file_path);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Successfully ${append ? "appended to" : "wrote"} file: ${file_path}\nSize: ${formatFileSize(stats.size)}\nModified: ${stats.mtime.toISOString()}`,
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Error writing to file: ${error.message}`,
+            },
+          ],
+        };
+      }
+    }
+
+    case "delete_file": {
+      const file_path = args.file_path as string;
+      
+      try {
+        // パス検証
+        if (!isPathAllowed(file_path)) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: Access to path "${file_path}" is not allowed`,
+              },
+            ],
+          };
+        }
+
+        // ファイル存在確認
+        try {
+          const stats = await fs.stat(file_path);
+          if (!stats.isFile()) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: `Error: "${file_path}" is not a file`,
+                },
+              ],
+            };
+          }
+        } catch (error) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: File "${file_path}" does not exist`,
+              },
+            ],
+          };
+        }
+
+        // ファイル削除
+        await fs.unlink(file_path);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Successfully deleted file: ${file_path}`,
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Error deleting file: ${error.message}`,
+            },
+          ],
+        };
+      }
+    }
+
+    case "create_directory": {
+      const directory_path = args.directory_path as string;
+      
+      try {
+        // パス検証
+        if (!isPathAllowed(directory_path)) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: Access to path "${directory_path}" is not allowed`,
+              },
+            ],
+          };
+        }
+
+        // ディレクトリ作成
+        await fs.mkdir(directory_path, { recursive: true });
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Successfully created directory: ${directory_path}`,
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Error creating directory: ${error.message}`,
+            },
+          ],
+        };
+      }
+    }
+
+    case "search_files": {
+      const search_path = args.search_path as string;
+      const pattern = args.pattern as string;
+      
+      try {
+        // パス検証
+        if (!isPathAllowed(search_path)) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: Access to path "${search_path}" is not allowed`,
+              },
+            ],
+          };
+        }
+
+        // ファイル存在確認
+        const stats = await fs.stat(search_path);
+        if (!stats.isDirectory()) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: "${search_path}" is not a directory`,
+              },
+            ],
+          };
+        }
+
+        // glob検索
+        const files = await glob(`${search_path}/**/${pattern}`, {
+          absolute: true,
+          nodir: true,
+        });
+
+        // 結果整形
+        const result = files.map(file => {
+          // 許可されたパスのみ含める
+          if (isPathAllowed(file)) return file;
+          return null;
+        }).filter(Boolean);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Error searching files: ${error.message}`,
+            },
+          ],
+        };
+      }
+    }
+
+    case "get_directory_tree": {
+      const directory_path = args.directory_path as string;
+      const max_depth = args.max_depth as number || 3;
+      
+      try {
+        // パス検証
+        if (!isPathAllowed(directory_path)) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: Access to path "${directory_path}" is not allowed`,
+              },
+            ],
+          };
+        }
+
+        // ディレクトリ存在確認
+        const stats = await fs.stat(directory_path);
+        if (!stats.isDirectory()) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: "${directory_path}" is not a directory`,
+              },
+            ],
+          };
+        }
+
+        // 再帰的にディレクトリツリーを生成する関数
+        async function generateTree(dirPath: string, prefix = "", depth = 1): Promise<string> {
+          if (depth > max_depth) {
+            return `${prefix}... (max depth reached)\n`;
+          }
+
+          try {
+            const entries = await fs.readdir(dirPath, { withFileTypes: true });
+            let result = "";
+
+            // ディレクトリとファイルを分けてソート
+            const dirs = entries.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+            const files = entries.filter(e => !e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+
+            // ディレクトリを先に処理
+            for (let i = 0; i < dirs.length; i++) {
+              const dir = dirs[i];
+              const isLast = i === dirs.length - 1 && files.length === 0;
+              const connector = isLast ? "└── " : "├── ";
+              const newPrefix = prefix + (isLast ? "    " : "│   ");
+              
+              result += `${prefix}${connector}📁 ${dir.name}/\n`;
+              
+              const fullPath = path.join(dirPath, dir.name);
+              if (isPathAllowed(fullPath)) {
+                result += await generateTree(fullPath, newPrefix, depth + 1);
+              } else {
+                result += `${newPrefix}... (access restricted)\n`;
+              }
+            }
+
+            // ファイルを処理
+            for (let i = 0; i < files.length; i++) {
+              const file = files[i];
+              const isLast = i === files.length - 1;
+              const connector = isLast ? "└── " : "├── ";
+              
+              // ファイルサイズを取得
+              const filePath = path.join(dirPath, file.name);
+              let sizeInfo = "";
+              
+              if (isPathAllowed(filePath)) {
+                try {
+                  const stats = await fs.stat(filePath);
+                  sizeInfo = ` (${formatFileSize(stats.size)})`;
+                } catch (e) {
+                  sizeInfo = " (error getting size)";
+                }
+              }
+              
+              result += `${prefix}${connector}📄 ${file.name}${sizeInfo}\n`;
+            }
+
+            return result;
+          } catch (error) {
+            return `${prefix}Error reading directory: ${error}\n`;
+          }
+        }
+
+        // ルートディレクトリ名を含めたツリーを生成
+        const dirName = path.basename(directory_path);
+        const tree = `📁 ${dirName}/ (${directory_path})\n${await generateTree(directory_path)}`;
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: tree,
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Error generating directory tree: ${error.message}`,
+            },
+          ],
+        };
+      }
+    }
+
+    case "move_file": {
+      const source_path = args.source_path as string;
+      const target_path = args.target_path as string;
+      
+      try {
+        // パス検証
+        if (!isPathAllowed(source_path)) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: Access to source path "${source_path}" is not allowed`,
               },
             ],
           };
         }
         
-        await fs.rm(filePath, { recursive: true, force: true });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Successfully deleted directory: ${filePath}`,
-            },
-          ],
-        };
-      } else {
-        await fs.unlink(filePath);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Successfully deleted file: ${filePath}`,
-            },
-          ],
-        };
-      }
-    } catch (error: any) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: `Error deleting file: ${error.message}`,
-          },
-        ],
-      };
-    }
-  }
-);
-
-// ディレクトリ作成ツール
-server.tool(
-  "create_directory",
-  "Create a directory",
-  {
-    directory_path: z.string().describe("Path to the directory to create"),
-  },
-  async ({ directory_path }) => {
-    try {
-      // パス検証
-      if (!isPathAllowed(directory_path)) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: Access to path "${directory_path}" is not allowed`,
-            },
-          ],
-        };
-      }
-
-      // ディレクトリ作成
-      await fs.mkdir(directory_path, { recursive: true });
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Successfully created directory: ${directory_path}`,
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: `Error creating directory: ${error.message}`,
-          },
-        ],
-      };
-    }
-  }
-);
-
-// ファイル移動・名前変更ツール
-server.tool(
-  "move_file",
-  "Move or rename a file or directory",
-  {
-    source_path: z.string().describe("Source path of the file or directory"),
-    destination_path: z.string().describe("Destination path for the file or directory"),
-  },
-  async ({ source_path, destination_path }) => {
-    try {
-      // パス検証
-      if (!isPathAllowed(source_path) || !isPathAllowed(destination_path)) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: Access to path "${!isPathAllowed(source_path) ? source_path : destination_path}" is not allowed`,
-            },
-          ],
-        };
-      }
-
-      // ファイル存在確認
-      await fs.access(source_path);
-
-      // 宛先ディレクトリ存在確認
-      const destDir = path.dirname(destination_path);
-      try {
-        await fs.access(destDir);
-      } catch (error) {
-        // 宛先ディレクトリがない場合は作成
-        await fs.mkdir(destDir, { recursive: true });
-      }
-
-      // ファイル移動
-      await fs.rename(source_path, destination_path);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Successfully moved file from ${source_path} to ${destination_path}`,
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: `Error moving file: ${error.message}`,
-          },
-        ],
-      };
-    }
-  }
-);
-
-// ファイル検索ツール
-server.tool(
-  "search_files",
-  "Search for files matching a pattern",
-  {
-    base_directory: z.string().describe("Base directory to search in"),
-    pattern: z.string().describe("Glob pattern to match files (e.g. '**/*.txt')"),
-    max_results: z.number().optional().describe("Maximum number of results to return"),
-  },
-  async ({ base_directory, pattern, max_results = 100 }) => {
-    try {
-      // パス検証
-      if (!isPathAllowed(base_directory)) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: Access to path "${base_directory}" is not allowed`,
-            },
-          ],
-        };
-      }
-
-      // ディレクトリ存在確認
-      const stats = await fs.stat(base_directory);
-      if (!stats.isDirectory()) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: "${base_directory}" is not a directory`,
-            },
-          ],
-        };
-      }
-
-      // ファイル検索
-      const searchPattern = path.join(base_directory, pattern);
-      const files = await glob(searchPattern, { nodir: true });
-      
-      // 結果数制限
-      const limitedFiles = files.slice(0, max_results);
-      const hasMore = files.length > max_results;
-
-      // ファイル情報取得
-      const fileInfoPromises = limitedFiles.map(async (filePath) => {
-        try {
-          const stats = await fs.stat(filePath);
+        if (!isPathAllowed(target_path)) {
           return {
-            path: filePath,
-            isDirectory: stats.isDirectory(),
-            size: stats.size,
-            modified: stats.mtime.toISOString(),
-            created: stats.birthtime.toISOString(),
-          };
-        } catch (error) {
-          return {
-            path: filePath,
-            error: "Cannot access file information",
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: Access to target path "${target_path}" is not allowed`,
+              },
+            ],
           };
         }
-      });
 
-      const fileInfoList = await Promise.all(fileInfoPromises);
-
-      // レスポンス形成
-      let result = `Search results for "${pattern}" in ${base_directory}:\n\n`;
-      
-      if (fileInfoList.length > 0) {
-        fileInfoList.forEach((file, index) => {
-          const relativePath = path.relative(base_directory, file.path);
-          if ("error" in file) {
-            result += `${index + 1}. ⚠️ ${relativePath} (${file.error})\n`;
-          } else {
-            const sizeStr = formatFileSize(file.size);
-            result += `${index + 1}. 📄 ${relativePath} (${sizeStr}, Modified: ${formatDate(file.modified)})\n`;
-          }
-        });
-        
-        if (hasMore) {
-          result += `\n...and ${files.length - max_results} more files (showing first ${max_results} results)`;
-        }
-      } else {
-        result += "No files found matching the pattern.";
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: result,
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: `Error searching files: ${error.message}`,
-          },
-        ],
-      };
-    }
-  }
-);
-
-// ディレクトリツリー取得ツール
-server.tool(
-  "get_directory_tree",
-  "Get a tree representation of a directory structure",
-  {
-    directory_path: z.string().describe("Path to the directory to get tree for"),
-    max_depth: z.number().optional().describe("Maximum depth to traverse"),
-    include_files: z.boolean().optional().describe("Include files in the tree"),
-  },
-  async ({ directory_path, max_depth = 3, include_files = true }) => {
-    try {
-      // パス検証
-      if (!isPathAllowed(directory_path)) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: Access to path "${directory_path}" is not allowed`,
-            },
-          ],
-        };
-      }
-
-      // ディレクトリ存在確認
-      const stats = await fs.stat(directory_path);
-      if (!stats.isDirectory()) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: "${directory_path}" is not a directory`,
-            },
-          ],
-        };
-      }
-
-      // ディレクトリツリー生成関数
-      async function generateTree(dirPath: string, prefix = "", depth = 1): Promise<string> {
-        if (depth > max_depth) {
-          return `${prefix}│\n${prefix}└── ... (max depth reached)\n`;
-        }
-
-        let result = "";
-        
+        // ソースファイル存在確認
         try {
-          const files = await fs.readdir(dirPath);
-          const sortedFiles = files.sort();
-          
-          for (let i = 0; i < sortedFiles.length; i++) {
-            const file = sortedFiles[i];
-            const filePath = path.join(dirPath, file);
-            
-            try {
-              const stats = await fs.stat(filePath);
-              const isLast = i === sortedFiles.length - 1;
-              
-              // ファイルとディレクトリで処理分岐
-              if (stats.isDirectory()) {
-                result += `${prefix}${isLast ? "└── " : "├── "}📁 ${file}/\n`;
-                
-                // サブディレクトリを再帰処理
-                result += await generateTree(
-                  filePath,
-                  `${prefix}${isLast ? "    " : "│   "}`,
-                  depth + 1
-                );
-              } else if (include_files) {
-                // ファイルサイズ取得
-                const sizeStr = formatFileSize(stats.size);
-                result += `${prefix}${isLast ? "└── " : "├── "}📄 ${file} (${sizeStr})\n`;
-              }
-            } catch (error) {
-              // ファイルにアクセスできない場合
-              const isLast = i === sortedFiles.length - 1;
-              result += `${prefix}${isLast ? "└── " : "├── "}⚠️ ${file} (access error)\n`;
-            }
-          }
+          await fs.access(source_path);
         } catch (error) {
-          result += `${prefix}└── ⚠️ Error reading directory\n`;
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: Source file "${source_path}" does not exist`,
+              },
+            ],
+          };
         }
-        
-        return result;
+
+        // ターゲットディレクトリがない場合は作成
+        const targetDir = path.dirname(target_path);
+        try {
+          await fs.access(targetDir);
+        } catch (error) {
+          await fs.mkdir(targetDir, { recursive: true });
+        }
+
+        // ファイル移動
+        await fs.rename(source_path, target_path);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Successfully moved file from "${source_path}" to "${target_path}"`,
+            },
+          ],
+        };
+      } catch (error: any) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Error moving file: ${error.message}`,
+            },
+          ],
+        };
       }
+    }
 
-      // ツリー生成
-      const dirName = path.basename(directory_path);
-      let treeOutput = `📁 ${dirName}/\n`;
-      treeOutput += await generateTree(directory_path);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: treeOutput,
-          },
-        ],
-      };
-    } catch (error: any) {
+    default:
       return {
         isError: true,
         content: [
           {
             type: "text",
-            text: `Error generating directory tree: ${error.message}`,
+            text: `Error: Unknown tool "${toolName}"`,
           },
         ],
       };
-    }
   }
-);
+});
 
 // ヘルパー関数: ファイルサイズのフォーマット
 function formatFileSize(bytes: number): string {
